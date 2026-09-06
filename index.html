@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chess</title>
   <style>
-    :root { --ink:#f4ecdf; --muted:#cbbda8; --light:#edd7b0; --dark:#b58863; }
+    :root { --ink:#f4ecdf; --muted:#cbbda8; --light:#8a6238; --dark:#3d2414; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -77,15 +77,15 @@
       width: 18%;
       height: 18%;
       border-radius: 50%;
-      background: rgba(20, 80, 30, .35);
+      background: rgba(255, 230, 160, .35);
     }
     .cell.capture:after {
       width: 78%;
       height: 78%;
       background: transparent;
-      border: 3px solid rgba(20, 80, 30, .38);
+      border: 3px solid rgba(255, 230, 160, .45);
     }
-    .cell.check { background: #d36b6b !important; }
+    .cell.check { background: #8a2f2f !important; }
     .controls {
       display: flex;
       flex-wrap: wrap;
@@ -483,7 +483,16 @@
             if (bCheck && bk && bk[0] === br && bk[1] === bc) cls += " check";
             cell.className = cls;
             cell.textContent = board[br][bc] ? GLYPH[board[br][bc]] : "";
-            cell.style.color = board[br][bc] && white(board[br][bc]) ? "#f8f3ea" : "#1a120c";
+            if (board[br][bc] && white(board[br][bc])) {
+              cell.style.color = "#fff8e8";
+              cell.style.textShadow = "0 0 2px #000, 0 1px 2px #000, 0 0 6px rgba(0,0,0,.8)";
+            } else if (board[br][bc]) {
+              cell.style.color = "#140e0a";
+              cell.style.textShadow = "0 0 2px rgba(255,220,170,.35)";
+            } else {
+              cell.style.color = "";
+              cell.style.textShadow = "";
+            }
           }
         }
         elUndo.disabled = !history.length || busy;
