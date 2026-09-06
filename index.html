@@ -46,9 +46,12 @@
     #board {
       display: grid;
       grid-template-columns: repeat(8, 1fr);
-      aspect-ratio: 1;
+      grid-template-rows: repeat(8, 1fr);
+      width: 100%;
+      aspect-ratio: 1 / 1;
       overflow: hidden;
       border-radius: 6px;
+      background: #b58863;
     }
     .cell {
       position: relative;
@@ -58,6 +61,8 @@
       font-size: clamp(22px, 6vw, 38px);
       line-height: 1;
       user-select: none;
+      width: 100%;
+      height: 100%;
     }
     .cell.light { background: #edd7b0; }
     .cell.dark { background: #b58863; }
@@ -108,10 +113,13 @@
     <div class="subtitle">You are White · computer is Black</div>
     <div class="panel">
       <div id="status">White to move</div>
-      <div id="caps"></div>
     </div>
     <div class="board-frame"><div id="board"></div></div>
     <div class="controls">
+      <select id="ruleMode">
+        <option value="house" selected>Rules: House</option>
+        <option value="tournament">Rules: Tournament</option>
+      </select>
       <select id="level">
         <option value="easy">Level: Easy</option>
         <option value="medium" selected>Level: Medium</option>
@@ -121,7 +129,7 @@
       <button type="button" id="share" disabled>Share</button>
       <button type="button" id="restart">Restart</button>
     </div>
-    <div id="msg">Select a white piece, then a highlighted square. Pawns promote to queens.</div>
+    <div id="msg">House rules: change pieces freely. Pawns promote to queens.</div>
   </div>
 
   <script>
@@ -142,7 +150,7 @@
       };
       var VAL = { P:100, N:320, B:330, R:500, Q:900, K:20000, p:-100, n:-320, b:-330, r:-500, q:-900, k:-20000 };
 
-      var board, turn, castle, ep, gameOver, selected, cells, history, busy, lastMove;
+      var board, turn, castle, ep, gameOver, selected, cells, history, busy, lastMove, touched;
 
       var elBoard = document.getElementById("board");
       var elStatus = document.getElementById("status");
@@ -150,7 +158,9 @@
       var elUndo = document.getElementById("undo");
       var elShare = document.getElementById("share");
       var elLevel = document.getElementById("level");
+      var elRules = document.getElementById("ruleMode");
 
+      function tournament() { return elRules && elRules.value === "tournament"; }
       function copyBoard(b) {
         var n = [], r;
         for (r = 0; r < 8; r++) n[r] = b[r].slice();
@@ -158,13 +168,7 @@
       }
       function inb(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
       function white(p) { return p && p === p.toUpperCase(); }
-      function black(p) { return p && p === p.toLowerCase(); }
       function sideOf(p) { return !p ? "" : (white(p) ? "w" : "b"); }
-      function enemy(p, r, c) {
-        var q = board[r][c];
-        if (!q) return false;
-        return sideOf(p) !== sideOf(q);
-      }
 
       function findKing(b, side) {
         var want = side === "w" ? "K" : "k", r, c;
@@ -173,7 +177,7 @@
       }
 
       function attacked(b, r, c, bySide) {
-        var i, nr, nc, p, dr, dc;
+        var i, nr, nc, dr, dc;
         var pawnDir = bySide === "w" ? 1 : -1;
         var pawn = bySide === "w" ? "P" : "p";
         if (inb(r + pawnDir, c - 1) && b[r + pawnDir][c - 1] === pawn) return true;
@@ -280,7 +284,7 @@
         return out;
       }
 
-      function applyOn(b, m, cst, eps) {
+      function applyOn(b, m, cst) {
         var nb = copyBoard(b);
         var piece = nb[m.fr][m.fc];
         nb[m.fr][m.fc] = "";
@@ -316,304 +320,4 @@
               pushMove(list, 7, 4, 7, 2, { castle: "wq" });
           }
         } else {
-          if (castle.bk && !board[0][5] && !board[0][6] && board[0][4] === "k" && board[0][7] === "r") {
-            if (!attacked(board, 0, 4, "w") && !attacked(board, 0, 5, "w") && !attacked(board, 0, 6, "w"))
-              pushMove(list, 0, 4, 0, 6, { castle: "bk" });
-          }
-          if (castle.bq && !board[0][1] && !board[0][2] && !board[0][3] && board[0][4] === "k" && board[0][0] === "r") {
-            if (!attacked(board, 0, 4, "w") && !attacked(board, 0, 3, "w") && !attacked(board, 0, 2, "w"))
-              pushMove(list, 0, 4, 0, 2, { castle: "bq" });
-          }
-        }
-      }
-
-      function legalMoves(side) {
-        var list = [], r, c, raw, i, saved, applied;
-        for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) {
-          if (sideOf(board[r][c]) !== side) continue;
-          raw = rawMoves(board, r, c);
-          for (i = 0; i < raw.length; i++) list.push(raw[i]);
-        }
-        addCastles(list, side);
-        var legal = [];
-        saved = { board: board, castle: castle, ep: ep };
-        for (i = 0; i < list.length; i++) {
-          applied = applyOn(saved.board, list[i], saved.castle, saved.ep);
-          board = applied.board;
-          if (!inCheck(board, side)) legal.push(list[i]);
-          board = saved.board;
-        }
-        castle = saved.castle; ep = saved.ep;
-        return legal;
-      }
-
-      function playMove(m) {
-        var applied = applyOn(board, m, castle, ep);
-        board = applied.board;
-        castle = applied.castle;
-        ep = applied.ep;
-        lastMove = m;
-      }
-
-      function evaluate(b) {
-        var s = 0, r, c, p;
-        for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) {
-          p = b[r][c];
-          if (!p) continue;
-          s += VAL[p] || 0;
-          if (p === "P") s += (6 - r) * 4;
-          if (p === "p") s -= r * 4;
-          if (p === "N" || p === "B") s += (3.5 - Math.abs(c - 3.5)) * 6;
-          if (p === "n" || p === "b") s -= (3.5 - Math.abs(c - 3.5)) * 6;
-        }
-        return s;
-      }
-
-      function pickEasy(moves) { return moves[Math.floor(Math.random() * moves.length)]; }
-
-      function pickMedium(moves) {
-        var best = moves[0], bestS = -99999, i, applied, s;
-        var saved = { board: board, castle: castle, ep: ep };
-        for (i = 0; i < moves.length; i++) {
-          applied = applyOn(saved.board, moves[i], saved.castle, saved.ep);
-          s = -evaluate(applied.board);
-          if (moves[i].cap) s += 15;
-          if (s > bestS) { bestS = s; best = moves[i]; }
-        }
-        board = saved.board; castle = saved.castle; ep = saved.ep;
-        return best;
-      }
-
-      function pickHard(moves) {
-        var best = moves[0], bestS = -99999, i, j, applied, reply, worst, after, val;
-        var saved = { board: board, castle: castle, ep: ep };
-        for (i = 0; i < moves.length; i++) {
-          applied = applyOn(saved.board, moves[i], saved.castle, saved.ep);
-          board = applied.board; castle = applied.castle; ep = applied.ep;
-          if (inCheck(board, "w") && legalMoves("w").length === 0) {
-            board = saved.board; castle = saved.castle; ep = saved.ep;
-            return moves[i];
-          }
-          reply = legalMoves("w");
-          worst = 99999;
-          if (!reply.length) worst = inCheck(board, "w") ? 30000 : 0;
-          for (j = 0; j < reply.length; j++) {
-            after = applyOn(board, reply[j], castle, ep);
-            val = -evaluate(after.board);
-            if (val < worst) worst = val;
-          }
-          if (worst > bestS) { bestS = worst; best = moves[i]; }
-          board = saved.board; castle = saved.castle; ep = saved.ep;
-        }
-        return best;
-      }
-
-      function chooseAI() {
-        var moves = legalMoves("b");
-        if (!moves.length) return null;
-        var level = elLevel.value;
-        if (level === "easy") return pickEasy(moves);
-        if (level === "hard") return pickHard(moves);
-        return pickMedium(moves);
-      }
-
-      function snapshot() {
-        history.push({
-          board: copyBoard(board),
-          turn: turn,
-          castle: { wk: castle.wk, wq: castle.wq, bk: castle.bk, bq: castle.bq },
-          ep: ep ? ep.slice() : null,
-          gameOver: gameOver,
-          lastMove: lastMove ? { fr: lastMove.fr, fc: lastMove.fc, tr: lastMove.tr, tc: lastMove.tc } : null,
-          msg: elMsg.innerHTML
-        });
-        elUndo.disabled = history.length === 0;
-      }
-
-      function todayStamp() {
-        var d = new Date(), m = d.getMonth() + 1, day = d.getDate();
-        return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
-      }
-      function levelLabel() {
-        var v = elLevel.value;
-        return v.charAt(0).toUpperCase() + v.slice(1);
-      }
-      function resultText() {
-        var wMoves = legalMoves("w").length, bMoves = legalMoves("b").length;
-        var outcome = "Draw";
-        if (turn === "w" && !wMoves) outcome = inCheck(board, "w") ? "Black won" : "Draw";
-        if (turn === "b" && !bMoves) outcome = inCheck(board, "b") ? "White won" : "Draw";
-        if (gameOver && elStatus.innerHTML.indexOf("White") !== -1 && elStatus.innerHTML.indexOf("wins") !== -1) outcome = "White won";
-        if (gameOver && elStatus.innerHTML.indexOf("Black") !== -1 && elStatus.innerHTML.indexOf("wins") !== -1) outcome = "Black won";
-        var grid = [], r, c, row, p;
-        for (r = 0; r < 8; r++) {
-          row = "";
-          for (c = 0; c < 8; c++) {
-            p = board[r][c];
-            row += p ? GLYPH[p] : ((r + c) % 2 ? "🟫" : "beige" ? "⬜" : "⬜");
-          }
-          grid.push(row);
-        }
-        return ["Chess " + todayStamp(), levelLabel() + " · " + outcome, "", grid.join("\n")].join("\n");
-      }
-
-      function render() {
-        var tmap = {}, cmap = {}, i, moves, k;
-        if (selected) {
-          moves = legalMoves("w");
-          for (i = 0; i < moves.length; i++) {
-            if (moves[i].fr === selected.r && moves[i].fc === selected.c) {
-              tmap[moves[i].tr + "," + moves[i].tc] = true;
-              if (moves[i].cap || moves[i].epCap) cmap[moves[i].tr + "," + moves[i].tc] = true;
-            }
-          }
-        }
-        var wk = findKing(board, "w"), bk = findKing(board, "b");
-        var wCheck = inCheck(board, "w"), bCheck = inCheck(board, "b");
-        for (var r = 0; r < 8; r++) {
-          for (var c = 0; c < 8; c++) {
-            var cell = cells[r][c];
-            var cls = "cell " + ((r + c) % 2 === 0 ? "light" : "dark");
-            if (selected && selected.r === r && selected.c === c) cls += " selected";
-            if (tmap[r + "," + c]) cls += cmap[r + "," + c] ? " valid capture" : " valid";
-            if (wCheck && wk && wk[0] === r && wk[1] === c) cls += " check";
-            if (bCheck && bk && bk[0] === r && bk[1] === c) cls += " check";
-            cell.className = cls;
-            cell.textContent = board[r][c] ? GLYPH[board[r][c]] : "";
-            cell.style.color = board[r][c] && white(board[r][c]) ? "#f8f3ea" : "#1a120c";
-            if (board[r][c] && white(board[r][c])) cell.style.textShadow = "0 1px 1px rgba(0,0,0,.45)";
-            else cell.style.textShadow = "0 1px 1px rgba(255,255,255,.25)";
-          }
-        }
-        elUndo.disabled = history.length === 0 || busy;
-        elShare.disabled = !gameOver;
-      }
-
-      function setStatus() {
-        if (gameOver) return;
-        elStatus.innerHTML = turn === "w" ? "White to move" : "Black thinking...";
-      }
-
-      function finishIfNeeded() {
-        var moves = legalMoves(turn);
-        if (moves.length) return false;
-        gameOver = true;
-        selected = null;
-        if (inCheck(board, turn)) elStatus.innerHTML = turn === "w" ? "Black wins" : "White wins";
-        else elStatus.innerHTML = "Draw by stalemate";
-        elMsg.innerHTML = "Game over — tap Share for a result card";
-        render();
-        return true;
-      }
-
-      function clickCell(r, c) {
-        if (gameOver || turn !== "w" || busy) return;
-        if (selected) {
-          var moves = legalMoves("w"), i, hit = null;
-          for (i = 0; i < moves.length; i++) {
-            if (moves[i].fr === selected.r && moves[i].fc === selected.c && moves[i].tr === r && moves[i].tc === c) hit = moves[i];
-          }
-          if (hit) {
-            snapshot();
-            playMove(hit);
-            selected = null;
-            turn = "b";
-            setStatus();
-            render();
-            if (finishIfNeeded()) return;
-            elMsg.innerHTML = "";
-            busy = true;
-            elUndo.disabled = true;
-            setTimeout(aiMove, 280);
-            return;
-          }
-        }
-        if (sideOf(board[r][c]) === "w") {
-          selected = { r: r, c: c };
-          elMsg.innerHTML = "";
-        } else {
-          selected = null;
-        }
-        render();
-      }
-
-      function aiMove() {
-        if (gameOver || turn !== "b") { busy = false; return; }
-        var pick = chooseAI();
-        busy = false;
-        if (!pick) { finishIfNeeded(); return; }
-        playMove(pick);
-        turn = "w";
-        setStatus();
-        render();
-        if (finishIfNeeded()) return;
-        elMsg.innerHTML = "";
-      }
-
-      function undo() {
-        if (!history.length || busy) return;
-        var prev = history.pop();
-        board = copyBoard(prev.board);
-        turn = prev.turn;
-        castle = prev.castle;
-        ep = prev.ep;
-        gameOver = prev.gameOver;
-        lastMove = prev.lastMove;
-        selected = null;
-        elMsg.innerHTML = prev.msg;
-        if (!gameOver) setStatus();
-        else elShare.disabled = false;
-        render();
-      }
-
-      function shareResult() {
-        if (!gameOver) return;
-        var text = resultText();
-        if (navigator.share) navigator.share({ title: "Chess", text: text }).catch(function () { copyText(text); });
-        else copyText(text);
-      }
-      function copyText(text) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(function () {
-            elMsg.innerHTML = "Result copied — paste it anywhere";
-          }).catch(function () { fallbackCopy(text); });
-        } else fallbackCopy(text);
-      }
-      function fallbackCopy(text) {
-        var area = document.createElement("textarea");
-        area.value = text;
-        document.body.appendChild(area);
-        area.select();
-        try { document.execCommand("copy"); elMsg.innerHTML = "Result copied — paste it anywhere"; }
-        catch (e) { alert(text); }
-        document.body.removeChild(area);
-      }
-
-      function buildGrid() {
-        elBoard.innerHTML = "";
-        cells = [];
-        for (var r = 0; r < 8; r++) {
-          cells[r] = [];
-          for (var c = 0; c < 8; c++) {
-            (function (rr, cc) {
-              var cell = document.createElement("div");
-              cell.onclick = function () { clickCell(rr, cc); };
-              elBoard.appendChild(cell);
-              cells[rr][cc] = cell;
-            })(r, c);
-          }
-        }
-      }
-
-      function start() {
-        board = copyBoard(START);
-        turn = "w";
-        castle = { wk: true, wq: true, bk: true, bq: true };
-        ep = null;
-        gameOver = false;
-        selected = null;
-        history = [];
-        busy = false;
-        lastMove = null;
-        elMsg.innerHTML = "Select a white piece, then a highlighted square. Pawns promote to queens.";
-       
+          if (castle.bk && !board[0][5] && !board[0][6] && board[0][4] === "k" && board[0][7] === "r")
