@@ -451,8 +451,6 @@
           }
           grid.push(row);
         }
-        var url = playUrl();
-        if (url) lines.push("", "Play: " + url);
         var lines = ["Chess " + todayStamp(), rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome, "Playing Black", "", grid.join("\n")];
         return lines.join("\n");
       }
