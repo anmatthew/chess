@@ -113,9 +113,9 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Chess by Matthew</h1>
-    <div class="subtitle">You are White · computer is Black</div>
-    <div class="panel"><div id="status">White to move</div></div>
+    <h1>Chess</h1>
+    <div class="subtitle">You are Black · computer is White</div>
+    <div class="panel"><div id="status">White thinking...</div></div>
     <div class="board-frame">
       <div id="board">
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
@@ -142,7 +142,7 @@
       <button type="button" id="share">Share</button>
       <button type="button" id="restart">Restart</button>
     </div>
-    <div id="msg">House rules: change pieces freely. Pawns promote to queens.</div>
+    <div id="msg">Black is at the bottom. White moves first.</div>
   </div>
 
   <script>
@@ -181,6 +181,7 @@
       function inb(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
       function white(p) { return !!p && p === p.toUpperCase(); }
       function sideOf(p) { return p ? (white(p) ? "w" : "b") : ""; }
+      function flip(n) { return 7 - n; }
       function playUrl() {
         var href = window.location.href || "";
         if (href.indexOf("http://") === 0 || href.indexOf("https://") === 0) return href.split("#")[0];
@@ -350,7 +351,7 @@
       }
 
       function pieceHasMove(r, c) {
-        var moves = legalMoves("w"), i;
+        var moves = legalMoves("b"), i;
         for (i = 0; i < moves.length; i++) if (moves[i].fr === r && moves[i].fc === c) return true;
         return false;
       }
@@ -377,7 +378,7 @@
         var best = moves[0], bestS = -99999, i, applied, s, saved = { board: board, castle: castle, ep: ep };
         for (i = 0; i < moves.length; i++) {
           applied = applyOn(saved.board, moves[i], saved.castle);
-          s = -evaluate(applied.board) + (moves[i].cap ? 15 : 0);
+          s = evaluate(applied.board) + (moves[i].cap ? 15 : 0);
           if (s > bestS) { bestS = s; best = moves[i]; }
         }
         board = saved.board; castle = saved.castle; ep = saved.ep;
@@ -389,14 +390,14 @@
         for (i = 0; i < moves.length; i++) {
           applied = applyOn(saved.board, moves[i], saved.castle);
           board = applied.board; castle = applied.castle; ep = applied.ep;
-          if (inCheck(board, "w") && legalMoves("w").length === 0) {
+          if (inCheck(board, "b") && legalMoves("b").length === 0) {
             board = saved.board; castle = saved.castle; ep = saved.ep; return moves[i];
           }
-          reply = legalMoves("w"); worst = 99999;
-          if (!reply.length) worst = inCheck(board, "w") ? 30000 : 0;
+          reply = legalMoves("b"); worst = 99999;
+          if (!reply.length) worst = inCheck(board, "b") ? 30000 : 0;
           for (j = 0; j < reply.length; j++) {
             after = applyOn(board, reply[j], castle);
-            val = -evaluate(after.board);
+            val = evaluate(after.board);
             if (val < worst) worst = val;
           }
           if (worst > bestS) { bestS = worst; best = moves[i]; }
@@ -405,7 +406,7 @@
         return best;
       }
       function chooseAI() {
-        var moves = legalMoves("b");
+        var moves = legalMoves("w");
         if (!moves.length) return null;
         var level = elLevel ? elLevel.value : "medium";
         if (level === "easy") return pickEasy(moves);
@@ -431,7 +432,7 @@
       function rulesHint() {
         return tournament()
           ? "Tournament rules: touch-move. If you select a piece that can move, you must move it."
-          : "House rules: change pieces freely. Pawns promote to queens.";
+          : "House rules: change pieces freely. You are Black at the bottom.";
       }
       function resultText() {
         var outcome = "In progress";
@@ -440,16 +441,17 @@
           if (elStatus.innerHTML.indexOf("White wins") !== -1) outcome = "White won";
           if (elStatus.innerHTML.indexOf("Black wins") !== -1) outcome = "Black won";
         }
-        var grid = [], r, c, row, p;
+        var grid = [], r, c, row, p, br, bc;
         for (r = 0; r < 8; r++) {
           row = "";
           for (c = 0; c < 8; c++) {
-            p = board[r][c];
-            row += p ? GLYPH[p] : (((r + c) % 2) ? "\uD83D\uDFEB" : "\u2B1C");
+            br = flip(r); bc = flip(c);
+            p = board[br][bc];
+            row += p ? GLYPH[p] : (((br + bc) % 2) ? "\uD83D\uDFEB" : "\u2B1C");
           }
           grid.push(row);
         }
-        var lines = ["Chess " + todayStamp(), rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome, "", grid.join("\n")];
+        var lines = ["Chess " + todayStamp(), rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome, "Playing Black", "", grid.join("\n")];
         var url = playUrl();
         if (url) lines.push("", "Play: " + url);
         return lines.join("\n");
@@ -457,13 +459,14 @@
 
       function render() {
         if (!cells || !board) return;
-        var tmap = {}, cmap = {}, i, moves;
+        var tmap = {}, cmap = {}, i, moves, vr, vc;
         if (selected) {
-          moves = legalMoves("w");
+          moves = legalMoves("b");
           for (i = 0; i < moves.length; i++) {
             if (moves[i].fr === selected.r && moves[i].fc === selected.c) {
-              tmap[moves[i].tr + "," + moves[i].tc] = true;
-              if (moves[i].cap || moves[i].epCap) cmap[moves[i].tr + "," + moves[i].tc] = true;
+              vr = flip(moves[i].tr); vc = flip(moves[i].tc);
+              tmap[vr + "," + vc] = true;
+              if (moves[i].cap || moves[i].epCap) cmap[vr + "," + vc] = true;
             }
           }
         }
@@ -471,43 +474,45 @@
         var wCheck = inCheck(board, "w"), bCheck = inCheck(board, "b");
         for (var r = 0; r < 8; r++) {
           for (var c = 0; c < 8; c++) {
+            var br = flip(r), bc = flip(c);
             var cell = cells[r][c];
             var cls = "cell";
-            if (selected && selected.r === r && selected.c === c) cls += " selected";
+            if (selected && selected.r === br && selected.c === bc) cls += " selected";
             if (tmap[r + "," + c]) cls += cmap[r + "," + c] ? " valid capture" : " valid";
-            if (wCheck && wk && wk[0] === r && wk[1] === c) cls += " check";
-            if (bCheck && bk && bk[0] === r && bk[1] === c) cls += " check";
+            if (wCheck && wk && wk[0] === br && wk[1] === bc) cls += " check";
+            if (bCheck && bk && bk[0] === br && bk[1] === bc) cls += " check";
             cell.className = cls;
-            cell.textContent = board[r][c] ? GLYPH[board[r][c]] : "";
-            cell.style.color = board[r][c] && white(board[r][c]) ? "#f8f3ea" : "#1a120c";
+            cell.textContent = board[br][bc] ? GLYPH[board[br][bc]] : "";
+            cell.style.color = board[br][bc] && white(board[br][bc]) ? "#f8f3ea" : "#1a120c";
           }
         }
         elUndo.disabled = !history.length || busy;
       }
 
       function setStatus() {
-        if (!gameOver) elStatus.innerHTML = turn === "w" ? "White to move" : "Black thinking...";
+        if (!gameOver) elStatus.innerHTML = turn === "b" ? "Black to move" : "White thinking...";
       }
 
       function finishIfNeeded() {
         var moves = legalMoves(turn);
         if (moves.length) return false;
         gameOver = true; selected = null; touched = false;
-        elStatus.innerHTML = inCheck(board, turn) ? (turn === "w" ? "Black wins" : "White wins") : "Draw by stalemate";
+        elStatus.innerHTML = inCheck(board, turn) ? (turn === "b" ? "White wins" : "Black wins") : "Draw by stalemate";
         elMsg.innerHTML = "Game over \u2014 tap Share for a result card";
         render();
         return true;
       }
 
-      function clickCell(r, c) {
-        if (gameOver || turn !== "w" || busy) return;
+      function clickCell(vr, vc) {
+        var r = flip(vr), c = flip(vc);
+        if (gameOver || turn !== "b" || busy) return;
         if (selected) {
-          var moves = legalMoves("w"), i, hit = null;
+          var moves = legalMoves("b"), i, hit = null;
           for (i = 0; i < moves.length; i++) {
             if (moves[i].fr === selected.r && moves[i].fc === selected.c && moves[i].tr === r && moves[i].tc === c) hit = moves[i];
           }
           if (hit) {
-            snapshot(); playMove(hit); selected = null; touched = false; turn = "b";
+            snapshot(); playMove(hit); selected = null; touched = false; turn = "w";
             setStatus(); render();
             if (finishIfNeeded()) return;
             elMsg.innerHTML = ""; busy = true; elUndo.disabled = true;
@@ -519,7 +524,7 @@
             render(); return;
           }
         }
-        if (sideOf(board[r][c]) === "w") {
+        if (sideOf(board[r][c]) === "b") {
           if (tournament() && !pieceHasMove(r, c)) { elMsg.innerHTML = "That piece has no legal move."; return; }
           selected = { r: r, c: c };
           touched = tournament() && pieceHasMove(r, c);
@@ -529,12 +534,12 @@
       }
 
       function aiMove() {
-        if (gameOver || turn !== "b") { busy = false; return; }
+        if (gameOver || turn !== "w") { busy = false; return; }
         var pick = chooseAI(); busy = false;
         if (!pick) { finishIfNeeded(); return; }
-        playMove(pick); turn = "w"; setStatus(); render();
+        playMove(pick); turn = "b"; setStatus(); render();
         if (finishIfNeeded()) return;
-        elMsg.innerHTML = "";
+        elMsg.innerHTML = "Your move.";
       }
 
       function undo() {
@@ -588,11 +593,12 @@
         turn = "w";
         castle = { wk: true, wq: true, bk: true, bq: true };
         ep = null; gameOver = false; selected = null; touched = false;
-        history = []; busy = false; lastMove = null;
-        elMsg.innerHTML = rulesHint();
+        history = []; busy = true; lastMove = null;
+        elMsg.innerHTML = "White moves first.";
         hookGrid();
         setStatus();
         render();
+        setTimeout(aiMove, 400);
       }
 
       document.getElementById("restart").onclick = start;
