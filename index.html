@@ -77,7 +77,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Chess by Matthew  </h1>
+    <h1>Chess by Matthew </h1>
     <div class="subtitle">You are Black · computer is White</div>
     <div class="panel"><div id="status">Black to move</div></div>
     <div class="board-frame">
@@ -115,6 +115,10 @@
       ];
       var GLYPH = {
         K:"\u265A",Q:"\u265B",R:"\u265C",B:"\u265D",N:"\u265E",P:"\u265F",
+        k:"\u265A",q:"\u265B",r:"\u265C",b:"\u265D",n:"\u265E",p:"\u265F"
+      };
+      var SHARE_GLYPH = {
+        K:"\u2654",Q:"\u2655",R:"\u2656",B:"\u2657",N:"\u2658",P:"\u2659",
         k:"\u265A",q:"\u265B",r:"\u265C",b:"\u265D",n:"\u265E",p:"\u265F"
       };
       var VAL = {P:100,N:320,B:330,R:500,Q:900,K:20000,p:-100,n:-320,b:-330,r:-500,q:-900,k:-20000};
@@ -361,16 +365,23 @@
           if(elStatus.innerHTML.indexOf("White wins")!==-1) outcome="White won";
           if(elStatus.innerHTML.indexOf("Black wins")!==-1) outcome="Black won";
         }
-        var grid=[],r,c,row,p,br,bc;
+        var light="\u2B1C", dark="\u2B1B";
+        var grid=[], r,c,row,p,br,bc;
         for(r=0;r<8;r++){
           row="";
           for(c=0;c<8;c++){
             br=flip(r); bc=flip(c); p=board[br][bc];
-            row += p ? GLYPH[p] : ".";
+            row += p ? SHARE_GLYPH[p] : (((br + bc) % 2) ? dark : light);
           }
           grid.push(row);
         }
-        var lines=["Chess "+todayStamp(), rulesLabel()+" · "+levelLabel()+" · "+outcome, "Playing Black","",grid.join("\n")];
+        var lines=[
+          "Chess " + todayStamp(),
+          rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome,
+          "Playing Black",
+          "",
+          grid.join("\n")
+        ];
         var url=playUrl(); if(url) lines.push("","Play: "+url);
         return lines.join("\n");
       }
