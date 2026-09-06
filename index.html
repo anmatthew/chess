@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess</title>
+  <style>
+    :root { --ink:#f4ecdf; --muted:#cbbda8; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background: radial-gradient(ellipse at top, #3a2a1c 0%, #14100c 58%, #0b0907 100%);
+    }
+    .wrap { width: min(94vw, 560px); padding: 18px 16px 22px; }
+    h1 {
+      margin: 0 0 4px;
+      text-align: center;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-size: 22px;
+    }
+    .subtitle { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+    }
+    #status { font-size: 13px; }
+    .board-frame {
+      padding: 14px;
+      border-radius: 16px;
+      background: linear-gradient(160deg, #7a5530, #3d2816 50%, #2a1b0e);
+      box-shadow: 0 18px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      aspect-ratio: 1;
+      overflow: hidden;
+      border-radius: 6px;
+    }
+    .cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(22px, 6vw, 38px);
+      line-height: 1;
+      user-select: none;
+    }
+    .cell.light { background: #edd7b0; }
+    .cell.dark { background: #b58863; }
+    .cell.selected { box-shadow: inset 0 0 0 3px #f6e19a; }
+    .cell.valid:after {
+      content: "";
+      position: absolute;
+      width: 18%;
+      height: 18%;
+      border-radius: 50%;
+      background: rgba(20, 80, 30, .35);
+    }
+    .cell.capture:after {
+      width: 78%;
+      height: 78%;
+      background: transparent;
+      border: 3px solid rgba(20, 80, 30, .38);
+    }
+    .cell.check { background: #d36b6b; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 14px;
+    }
+    button, select {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: 13px/1.2 Georgia, serif;
+      cursor: pointer;
+    }
+    button {
+      background: linear-gradient(#c7924a, #8a5a22);
+      color: #fff;
+      box-shadow: 0 3px 0 #5a3914;
+    }
+    button:hover { filter: brightness(1.06); }
+    button:disabled { opacity: .45; cursor: default; filter: none; }
+    select { background: #2a1d12; color: var(--ink); border: 1px solid rgba(255,255,255,.12); }
+    #msg { min-height: 1.2em; margin-top: 10px; text-align: center; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Chess</h1>
+    <div class="subtitle">You are White · computer is Black</div>
+    <div class="panel">
+      <div id="status">White to move</div>
+      <div id="caps"></div>
+    </div>
+    <div class="board-frame"><div id="board"></div></div>
+    <div class="controls">
+      <select id="level">
+        <option value="easy">Level: Easy</option>
+        <option value="medium" selected>Level: Medium</option>
+        <option value="hard">Level: Hard</option>
+      </select>
+      <button type="button" id="undo">Undo</button>
+      <button type="button" id="share" disabled>Share</button>
+      <button type="button" id="restart">Restart</button>
+    </div>
+    <div id="msg">Select a white piece, then a highlighted square. Pawns promote to queens.</div>
+  </div>
+
+  <script>
+    (function () {
+      var START = [
+        ["r","n","b","q","k","b","n","r"],
+        ["p","p","p","p","p","p","p","p"],
+        ["","","","","","","",""],
+        ["","","","","","","",""],
+        ["","","","","","","",""],
+        ["","","","","","","",""],
+        ["P","P","P","P","P","P","P","P"],
+        ["R","N","B","Q","K","B","N","R"]
+      ];
+      var GLYPH = {
+        K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘", P:"♙",
+        k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟"
+      };
+      var VAL = { P:100, N:320, B:330, R:500, Q:900, K:20000, p:-100, n:-320, b:-330, r:-500, q:-900, k:-20000 };
+
+      var board, turn, castle, ep, gameOver, selected, cells, history, busy, lastMove;
+
+      var elBoard = document.getElementById("board");
+      var elStatus = document.getElementById("status");
+      var elMsg = document.getElementById("msg");
+      var elUndo = document.getElementById("undo");
+      var elShare = document.getElementById("share");
+      var elLevel = document.getElementById("level");
+
+      function copyBoard(b) {
+        var n = [], r;
+        for (r = 0; r < 8; r++) n[r] = b[r].slice();
+        return n;
+      }
+      function inb(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+      function white(p) { return p && p === p.toUpperCase(); }
+      function black(p) { return p && p === p.toLowerCase(); }
+      function sideOf(p) { return !p ? "" : (white(p) ? "w" : "b"); }
+      function enemy(p, r, c) {
+        var q = board[r][c];
+        if (!q) return false;
+        return sideOf(p) !== sideOf(q);
+      }
+
+      function findKing(b, side) {
+        var want = side === "w" ? "K" : "k", r, c;
+        for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) if (b[r][c] === want) return [r, c];
+        return null;
+      }
+
+      function attacked(b, r, c, bySide) {
+        var i, nr, nc, p, dr, dc;
+        var pawnDir = bySide === "w" ? 1 : -1;
+        var pawn = bySide === "w" ? "P" : "p";
+        if (inb(r + pawnDir, c - 1) && b[r + pawnDir][c - 1] === pawn) return true;
+        if (inb(r + pawnDir, c + 1) && b[r + pawnDir][c + 1] === pawn) return true;
+        var kn = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        var nch = bySide === "w" ? "N" : "n";
+        for (i = 0; i < 8; i++) {
+          nr = r + kn[i][0]; nc = c + kn[i][1];
+          if (inb(nr, nc) && b[nr][nc] === nch) return true;
+        }
+        var kch = bySide === "w" ? "K" : "k";
+        for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          nr = r + dr; nc = c + dc;
+          if (inb(nr, nc) && b[nr][nc] === kch) return true;
+        }
+        var diag = [[-1,-1],[-1,1],[1,-1],[1,1]];
+        var orth = [[-1,0],[1,0],[0,-1],[0,1]];
+        function ray(dirs, sliders) {
+          var d, step, qr, qc, q;
+          for (d = 0; d < dirs.length; d++) {
+            qr = r; qc = c;
+            for (step = 0; step < 8; step++) {
+              qr += dirs[d][0]; qc += dirs[d][1];
+              if (!inb(qr, qc)) break;
+              q = b[qr][qc];
+              if (!q) continue;
+              if (sliders.indexOf(q) !== -1) return true;
+              break;
+            }
+          }
+          return false;
+        }
+        if (bySide === "w") {
+          if (ray(diag, "BQ")) return true;
+          if (ray(orth, "RQ")) return true;
+        } else {
+          if (ray(diag, "bq")) return true;
+          if (ray(orth, "rq")) return true;
+        }
+        return false;
+      }
+
+      function inCheck(b, side) {
+        var k = findKing(b, side);
+        if (!k) return true;
+        return attacked(b, k[0], k[1], side === "w" ? "b" : "w");
+      }
+
+      function pushMove(list, fr, fc, tr, tc, extra) {
+        var m = { fr: fr, fc: fc, tr: tr, tc: tc, piece: board[fr][fc], cap: board[tr][tc] || "" };
+        if (extra) for (var k in extra) m[k] = extra[k];
+        list.push(m);
+      }
+
+      function rawMoves(b, r, c) {
+        var p = b[r][c], out = [], i, nr, nc, dr, dc, step;
+        if (!p) return out;
+        var w = white(p), dir = w ? -1 : 1, start = w ? 6 : 1;
+        var typ = p.toUpperCase();
+        if (typ === "P") {
+          nr = r + dir;
+          if (inb(nr, c) && !b[nr][c]) {
+            pushMove(out, r, c, nr, c, { promo: (nr === 0 || nr === 7) });
+            if (r === start && !b[r + 2 * dir][c]) pushMove(out, r, c, r + 2 * dir, c, { dpp: true, epSet: [r + dir, c] });
+          }
+          for (dc = -1; dc <= 1; dc += 2) {
+            nc = c + dc; nr = r + dir;
+            if (!inb(nr, nc)) continue;
+            if (b[nr][nc] && sideOf(b[nr][nc]) !== sideOf(p)) pushMove(out, r, c, nr, nc, { promo: (nr === 0 || nr === 7) });
+            if (ep && ep[0] === nr && ep[1] === nc) pushMove(out, r, c, nr, nc, { epCap: true });
+          }
+        } else if (typ === "N") {
+          var kn = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+          for (i = 0; i < 8; i++) {
+            nr = r + kn[i][0]; nc = c + kn[i][1];
+            if (!inb(nr, nc)) continue;
+            if (!b[nr][nc] || sideOf(b[nr][nc]) !== sideOf(p)) pushMove(out, r, c, nr, nc);
+          }
+        } else if (typ === "K") {
+          for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {
+            if (!dr && !dc) continue;
+            nr = r + dr; nc = c + dc;
+            if (!inb(nr, nc)) continue;
+            if (!b[nr][nc] || sideOf(b[nr][nc]) !== sideOf(p)) pushMove(out, r, c, nr, nc);
+          }
+        } else {
+          var dirs = typ === "B" ? [[-1,-1],[-1,1],[1,-1],[1,1]]
+                   : typ === "R" ? [[-1,0],[1,0],[0,-1],[0,1]]
+                   : [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
+          for (i = 0; i < dirs.length; i++) {
+            nr = r; nc = c;
+            for (step = 0; step < 8; step++) {
+              nr += dirs[i][0]; nc += dirs[i][1];
+              if (!inb(nr, nc)) break;
+              if (!b[nr][nc]) pushMove(out, r, c, nr, nc);
+              else {
+                if (sideOf(b[nr][nc]) !== sideOf(p)) pushMove(out, r, c, nr, nc);
+                break;
+              }
+            }
+          }
+        }
+        return out;
+      }
+
+      function applyOn(b, m, cst, eps) {
+        var nb = copyBoard(b);
+        var piece = nb[m.fr][m.fc];
+        nb[m.fr][m.fc] = "";
+        if (m.epCap) nb[m.fr][m.tc] = "";
+        if (m.promo) piece = white(piece) ? "Q" : "q";
+        nb[m.tr][m.tc] = piece;
+        var ncst = { wk: cst.wk, wq: cst.wq, bk: cst.bk, bq: cst.bq };
+        if (piece === "K") { ncst.wk = false; ncst.wq = false; }
+        if (piece === "k") { ncst.bk = false; ncst.bq = false; }
+        if (m.fr === 7 && m.fc === 0) ncst.wq = false;
+        if (m.fr === 7 && m.fc === 7) ncst.wk = false;
+        if (m.fr === 0 && m.fc === 0) ncst.bq = false;
+        if (m.fr === 0 && m.fc === 7) ncst.bk = false;
+        if (m.tr === 7 && m.tc === 0) ncst.wq = false;
+        if (m.tr === 7 && m.tc === 7) ncst.wk = false;
+        if (m.tr === 0 && m.tc === 0) ncst.bq = false;
+        if (m.tr === 0 && m.tc === 7) ncst.bk = false;
+        if (m.castle === "wk") { nb[7][5] = "R"; nb[7][7] = ""; }
+        if (m.castle === "wq") { nb[7][3] = "R"; nb[7][0] = ""; }
+        if (m.castle === "bk") { nb[0][5] = "r"; nb[0][7] = ""; }
+        if (m.castle === "bq") { nb[0][3] = "r"; nb[0][0] = ""; }
+        return { board: nb, castle: ncst, ep: m.dpp ? m.epSet : null };
+      }
+
+      function addCastles(list, side) {
+        if (side === "w") {
+          if (castle.wk && !board[7][5] && !board[7][6] && board[7][4] === "K" && board[7][7] === "R") {
+            if (!attacked(board, 7, 4, "b") && !attacked(board, 7, 5, "b") && !attacked(board, 7, 6, "b"))
+              pushMove(list, 7, 4, 7, 6, { castle: "wk" });
+          }
+          if (castle.wq && !board[7][1] && !board[7][2] && !board[7][3] && board[7][4] === "K" && board[7][0] === "R") {
+            if (!attacked(board, 7, 4, "b") && !attacked(board, 7, 3, "b") && !attacked(board, 7, 2, "b"))
+              pushMove(list, 7, 4, 7, 2, { castle: "wq" });
+          }
+        } else {
+          if (castle.bk && !board[0][5] && !board[0][6] && board[0][4] === "k" && board[0][7] === "r") {
+            if (!attacked(board, 0, 4, "w") && !attacked(board, 0, 5, "w") && !attacked(board, 0, 6, "w"))
+              pushMove(list, 0, 4, 0, 6, { castle: "bk" });
+          }
+          if (castle.bq && !board[0][1] && !board[0][2] && !board[0][3] && board[0][4] === "k" && board[0][0] === "r") {
+            if (!attacked(board, 0, 4, "w") && !attacked(board, 0, 3, "w") && !attacked(board, 0, 2, "w"))
+              pushMove(list, 0, 4, 0, 2, { castle: "bq" });
+          }
+        }
+      }
+
+      function legalMoves(side) {
+        var list = [], r, c, raw, i, saved, applied;
+        for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) {
+          if (sideOf(board[r][c]) !== side) continue;
+          raw = rawMoves(board, r, c);
+          for (i = 0; i < raw.length; i++) list.push(raw[i]);
+        }
+        addCastles(list, side);
+        var legal = [];
+        saved = { board: board, castle: castle, ep: ep };
+        for (i = 0; i < list.length; i++) {
+          applied = applyOn(saved.board, list[i], saved.castle, saved.ep);
+          board = applied.board;
+          if (!inCheck(board, side)) legal.push(list[i]);
+          board = saved.board;
+        }
+        castle = saved.castle; ep = saved.ep;
+        return legal;
+      }
+
+      function playMove(m) {
+        var applied = applyOn(board, m, castle, ep);
+        board = applied.board;
+        castle = applied.castle;
+        ep = applied.ep;
+        lastMove = m;
+      }
+
+      function evaluate(b) {
+        var s = 0, r, c, p;
+        for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) {
+          p = b[r][c];
+          if (!p) continue;
+          s += VAL[p] || 0;
+          if (p === "P") s += (6 - r) * 4;
+          if (p === "p") s -= r * 4;
+          if (p === "N" || p === "B") s += (3.5 - Math.abs(c - 3.5)) * 6;
+          if (p === "n" || p === "b") s -= (3.5 - Math.abs(c - 3.5)) * 6;
+        }
+        return s;
+      }
+
+      function pickEasy(moves) { return moves[Math.floor(Math.random() * moves.length)]; }
+
+      function pickMedium(moves) {
+        var best = moves[0], bestS = -99999, i, applied, s;
+        var saved = { board: board, castle: castle, ep: ep };
+        for (i = 0; i < moves.length; i++) {
+          applied = applyOn(saved.board, moves[i], saved.castle, saved.ep);
+          s = -evaluate(applied.board);
+          if (moves[i].cap) s += 15;
+          if (s > bestS) { bestS = s; best = moves[i]; }
+        }
+        board = saved.board; castle = saved.castle; ep = saved.ep;
+        return best;
+      }
+
+      function pickHard(moves) {
+        var best = moves[0], bestS = -99999, i, j, applied, reply, worst, after, val;
+        var saved = { board: board, castle: castle, ep: ep };
+        for (i = 0; i < moves.length; i++) {
+          applied = applyOn(saved.board, moves[i], saved.castle, saved.ep);
+          board = applied.board; castle = applied.castle; ep = applied.ep;
+          if (inCheck(board, "w") && legalMoves("w").length === 0) {
+            board = saved.board; castle = saved.castle; ep = saved.ep;
+            return moves[i];
+          }
+          reply = legalMoves("w");
+          worst = 99999;
+          if (!reply.length) worst = inCheck(board, "w") ? 30000 : 0;
+          for (j = 0; j < reply.length; j++) {
+            after = applyOn(board, reply[j], castle, ep);
+            val = -evaluate(after.board);
+            if (val < worst) worst = val;
+          }
+          if (worst > bestS) { bestS = worst; best = moves[i]; }
+          board = saved.board; castle = saved.castle; ep = saved.ep;
+        }
+        return best;
+      }
+
+      function chooseAI() {
+        var moves = legalMoves("b");
+        if (!moves.length) return null;
+        var level = elLevel.value;
+        if (level === "easy") return pickEasy(moves);
+        if (level === "hard") return pickHard(moves);
+        return pickMedium(moves);
+      }
+
+      function snapshot() {
+        history.push({
+          board: copyBoard(board),
+          turn: turn,
+          castle: { wk: castle.wk, wq: castle.wq, bk: castle.bk, bq: castle.bq },
+          ep: ep ? ep.slice() : null,
+          gameOver: gameOver,
+          lastMove: lastMove ? { fr: lastMove.fr, fc: lastMove.fc, tr: lastMove.tr, tc: lastMove.tc } : null,
+          msg: elMsg.innerHTML
+        });
+        elUndo.disabled = history.length === 0;
+      }
+
+      function todayStamp() {
+        var d = new Date(), m = d.getMonth() + 1, day = d.getDate();
+        return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+      }
+      function levelLabel() {
+        var v = elLevel.value;
+        return v.charAt(0).toUpperCase() + v.slice(1);
+      }
+      function resultText() {
+        var wMoves = legalMoves("w").length, bMoves = legalMoves("b").length;
+        var outcome = "Draw";
+        if (turn === "w" && !wMoves) outcome = inCheck(board, "w") ? "Black won" : "Draw";
+        if (turn === "b" && !bMoves) outcome = inCheck(board, "b") ? "White won" : "Draw";
+        if (gameOver && elStatus.innerHTML.indexOf("White") !== -1 && elStatus.innerHTML.indexOf("wins") !== -1) outcome = "White won";
+        if (gameOver && elStatus.innerHTML.indexOf("Black") !== -1 && elStatus.innerHTML.indexOf("wins") !== -1) outcome = "Black won";
+        var grid = [], r, c, row, p;
+        for (r = 0; r < 8; r++) {
+          row = "";
+          for (c = 0; c < 8; c++) {
+            p = board[r][c];
+            row += p ? GLYPH[p] : ((r + c) % 2 ? "🟫" : "beige" ? "⬜" : "⬜");
+          }
+          grid.push(row);
+        }
+        return ["Chess " + todayStamp(), levelLabel() + " · " + outcome, "", grid.join("\n")].join("\n");
+      }
+
+      function render() {
+        var tmap = {}, cmap = {}, i, moves, k;
+        if (selected) {
+          moves = legalMoves("w");
+          for (i = 0; i < moves.length; i++) {
+            if (moves[i].fr === selected.r && moves[i].fc === selected.c) {
+              tmap[moves[i].tr + "," + moves[i].tc] = true;
+              if (moves[i].cap || moves[i].epCap) cmap[moves[i].tr + "," + moves[i].tc] = true;
+            }
+          }
+        }
+        var wk = findKing(board, "w"), bk = findKing(board, "b");
+        var wCheck = inCheck(board, "w"), bCheck = inCheck(board, "b");
+        for (var r = 0; r < 8; r++) {
+          for (var c = 0; c < 8; c++) {
+            var cell = cells[r][c];
+            var cls = "cell " + ((r + c) % 2 === 0 ? "light" : "dark");
+            if (selected && selected.r === r && selected.c === c) cls += " selected";
+            if (tmap[r + "," + c]) cls += cmap[r + "," + c] ? " valid capture" : " valid";
+            if (wCheck && wk && wk[0] === r && wk[1] === c) cls += " check";
+            if (bCheck && bk && bk[0] === r && bk[1] === c) cls += " check";
+            cell.className = cls;
+            cell.textContent = board[r][c] ? GLYPH[board[r][c]] : "";
+            cell.style.color = board[r][c] && white(board[r][c]) ? "#f8f3ea" : "#1a120c";
+            if (board[r][c] && white(board[r][c])) cell.style.textShadow = "0 1px 1px rgba(0,0,0,.45)";
+            else cell.style.textShadow = "0 1px 1px rgba(255,255,255,.25)";
+          }
+        }
+        elUndo.disabled = history.length === 0 || busy;
+        elShare.disabled = !gameOver;
+      }
+
+      function setStatus() {
+        if (gameOver) return;
+        elStatus.innerHTML = turn === "w" ? "White to move" : "Black thinking...";
+      }
+
+      function finishIfNeeded() {
+        var moves = legalMoves(turn);
+        if (moves.length) return false;
+        gameOver = true;
+        selected = null;
+        if (inCheck(board, turn)) elStatus.innerHTML = turn === "w" ? "Black wins" : "White wins";
+        else elStatus.innerHTML = "Draw by stalemate";
+        elMsg.innerHTML = "Game over — tap Share for a result card";
+        render();
+        return true;
+      }
+
+      function clickCell(r, c) {
+        if (gameOver || turn !== "w" || busy) return;
+        if (selected) {
+          var moves = legalMoves("w"), i, hit = null;
+          for (i = 0; i < moves.length; i++) {
+            if (moves[i].fr === selected.r && moves[i].fc === selected.c && moves[i].tr === r && moves[i].tc === c) hit = moves[i];
+          }
+          if (hit) {
+            snapshot();
+            playMove(hit);
+            selected = null;
+            turn = "b";
+            setStatus();
+            render();
+            if (finishIfNeeded()) return;
+            elMsg.innerHTML = "";
+            busy = true;
+            elUndo.disabled = true;
+            setTimeout(aiMove, 280);
+            return;
+          }
+        }
+        if (sideOf(board[r][c]) === "w") {
+          selected = { r: r, c: c };
+          elMsg.innerHTML = "";
+        } else {
+          selected = null;
+        }
+        render();
+      }
+
+      function aiMove() {
+        if (gameOver || turn !== "b") { busy = false; return; }
+        var pick = chooseAI();
+        busy = false;
+        if (!pick) { finishIfNeeded(); return; }
+        playMove(pick);
+        turn = "w";
+        setStatus();
+        render();
+        if (finishIfNeeded()) return;
+        elMsg.innerHTML = "";
+      }
+
+      function undo() {
+        if (!history.length || busy) return;
+        var prev = history.pop();
+        board = copyBoard(prev.board);
+        turn = prev.turn;
+        castle = prev.castle;
+        ep = prev.ep;
+        gameOver = prev.gameOver;
+        lastMove = prev.lastMove;
+        selected = null;
+        elMsg.innerHTML = prev.msg;
+        if (!gameOver) setStatus();
+        else elShare.disabled = false;
+        render();
+      }
+
+      function shareResult() {
+        if (!gameOver) return;
+        var text = resultText();
+        if (navigator.share) navigator.share({ title: "Chess", text: text }).catch(function () { copyText(text); });
+        else copyText(text);
+      }
+      function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            elMsg.innerHTML = "Result copied — paste it anywhere";
+          }).catch(function () { fallbackCopy(text); });
+        } else fallbackCopy(text);
+      }
+      function fallbackCopy(text) {
+        var area = document.createElement("textarea");
+        area.value = text;
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand("copy"); elMsg.innerHTML = "Result copied — paste it anywhere"; }
+        catch (e) { alert(text); }
+        document.body.removeChild(area);
+      }
+
+      function buildGrid() {
+        elBoard.innerHTML = "";
+        cells = [];
+        for (var r = 0; r < 8; r++) {
+          cells[r] = [];
+          for (var c = 0; c < 8; c++) {
+            (function (rr, cc) {
+              var cell = document.createElement("div");
+              cell.onclick = function () { clickCell(rr, cc); };
+              elBoard.appendChild(cell);
+              cells[rr][cc] = cell;
+            })(r, c);
+          }
+        }
+      }
+
+      function start() {
+        board = copyBoard(START);
+        turn = "w";
+        castle = { wk: true, wq: true, bk: true, bq: true };
+        ep = null;
+        gameOver = false;
+        selected = null;
+        history = [];
+        busy = false;
+        lastMove = null;
+        elMsg.innerHTML = "Select a white piece, then a highlighted square. Pawns promote to queens.";
+       
