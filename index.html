@@ -115,7 +115,7 @@
   <div class="wrap">
     <h1>Chess by Matthew </h1>
     <div class="subtitle">You are Black · computer is White</div>
-    <div class="panel"><div id="status">White thinking...</div></div>
+    <div class="panel"><div id="status">Black to move</div></div>
     <div class="board-frame">
       <div id="board">
         <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
@@ -142,7 +142,7 @@
       <button type="button" id="share">Share</button>
       <button type="button" id="restart">Restart</button>
     </div>
-    <div id="msg">Black is at the bottom. White moves first.</div>
+    <div id="msg">You move first. Select a black piece.</div>
   </div>
 
   <script>
@@ -432,7 +432,7 @@
       function rulesHint() {
         return tournament()
           ? "Tournament rules: touch-move. If you select a piece that can move, you must move it."
-          : "House rules: change pieces freely. You are Black at the bottom.";
+          : "House rules: you move first as Black.";
       }
       function resultText() {
         var outcome = "In progress";
@@ -602,15 +602,14 @@
 
       function start() {
         board = copyBoard(START);
-        turn = "w";
+        turn = "b";
         castle = { wk: true, wq: true, bk: true, bq: true };
         ep = null; gameOver = false; selected = null; touched = false;
-        history = []; busy = true; lastMove = null;
-        elMsg.innerHTML = "White moves first.";
+        history = []; busy = false; lastMove = null;
+        elMsg.innerHTML = "You move first. Select a black piece.";
         hookGrid();
         setStatus();
         render();
-        setTimeout(aiMove, 400);
       }
 
       document.getElementById("restart").onclick = start;
