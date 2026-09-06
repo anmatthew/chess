@@ -57,7 +57,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: clamp(20px, 5.6vw, 36px);
+      font-size: clamp(22px, 6vw, 38px);
       line-height: 1;
       user-select: none;
       background: var(--light);
@@ -158,7 +158,7 @@
         ["R","N","B","Q","K","B","N","R"]
       ];
       var GLYPH = {
-        K: "\u2654", Q: "\u2655", R: "\u2656", B: "\u2657", N: "\u2658", P: "\u2659",
+        K: "\u265A", Q: "\u265B", R: "\u265C", B: "\u265D", N: "\u265E", P: "\u265F",
         k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F"
       };
       var VAL = { P:100, N:320, B:330, R:500, Q:900, K:20000, p:-100, n:-320, b:-330, r:-500, q:-900, k:-20000 };
@@ -179,8 +179,8 @@
         return n;
       }
       function inb(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
-      function white(p) { return !!p && p === p.toUpperCase(); }
-      function sideOf(p) { return p ? (white(p) ? "w" : "b") : ""; }
+      function isWhite(p) { return !!p && p === p.toUpperCase(); }
+      function sideOf(p) { return p ? (isWhite(p) ? "w" : "b") : ""; }
       function flip(n) { return 7 - n; }
       function playUrl() {
         var href = window.location.href || "";
@@ -246,7 +246,7 @@
       function rawMoves(b, r, c) {
         var p = b[r][c], out = [], i, nr, nc, dr, dc, step;
         if (!p) return out;
-        var w = white(p), dir = w ? -1 : 1, start = w ? 6 : 1, typ = p.toUpperCase();
+        var w = isWhite(p), dir = w ? -1 : 1, start = w ? 6 : 1, typ = p.toUpperCase();
         if (typ === "P") {
           nr = r + dir;
           if (inb(nr, c) && !b[nr][c]) {
@@ -293,7 +293,7 @@
         var piece = nb[m.fr][m.fc];
         nb[m.fr][m.fc] = "";
         if (m.epCap) nb[m.fr][m.tc] = "";
-        if (m.promo) piece = white(piece) ? "Q" : "q";
+        if (m.promo) piece = isWhite(piece) ? "Q" : "q";
         nb[m.tr][m.tc] = piece;
         var ncst = { wk: cst.wk, wq: cst.wq, bk: cst.bk, bq: cst.bq };
         if (piece === "K") { ncst.wk = false; ncst.wq = false; }
@@ -483,15 +483,18 @@
             if (bCheck && bk && bk[0] === br && bk[1] === bc) cls += " check";
             cell.className = cls;
             cell.textContent = board[br][bc] ? GLYPH[board[br][bc]] : "";
-            if (board[br][bc] && white(board[br][bc])) {
-              cell.style.color = "#fff8e8";
-              cell.style.textShadow = "0 0 2px #000, 0 1px 2px #000, 0 0 6px rgba(0,0,0,.8)";
+            if (board[br][bc] && isWhite(board[br][bc])) {
+              cell.style.color = "#ffffff";
+              cell.style.textShadow = "0 0 1px #000, 0 1px 2px #000";
+              cell.style.webkitTextStroke = "1px #111";
             } else if (board[br][bc]) {
-              cell.style.color = "#140e0a";
-              cell.style.textShadow = "0 0 2px rgba(255,220,170,.35)";
+              cell.style.color = "#000000";
+              cell.style.textShadow = "0 0 1px #fff, 0 1px 2px rgba(255,255,255,.35)";
+              cell.style.webkitTextStroke = "0.5px #111";
             } else {
               cell.style.color = "";
               cell.style.textShadow = "";
+              cell.style.webkitTextStroke = "";
             }
           }
         }
