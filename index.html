@@ -65,14 +65,19 @@
       font: 13px/1.2 Georgia, serif; cursor: pointer;
     }
     button { background: linear-gradient(#c7924a, #8a5a22); color: #fff; }
-    button:disabled { opacity: .45; cursor: default; }
+    button:disabled {
+      background: #6b6b6b;
+      color: #d0d0d0;
+      cursor: default;
+      box-shadow: none;
+    }
     select { background: #2a1d12; color: var(--ink); }
     #msg { min-height: 1.2em; margin-top: 10px; text-align: center; color: var(--muted); font-size: 13px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Chess by Matthew  </h1>
+    <h1>Chess</h1>
     <div class="subtitle">You are Black · computer is White</div>
     <div class="panel"><div id="status">Black to move</div></div>
     <div class="board-frame">
@@ -91,7 +96,7 @@
         <option value="hard">Level: Hard</option>
       </select>
       <button type="button" id="undo">Undo</button>
-      <button type="button" id="share">Share</button>
+      <button type="button" id="share" disabled>Share</button>
       <button type="button" id="restart">Restart</button>
     </div>
     <div id="msg">You move first. Select a black piece.</div>
@@ -405,6 +410,7 @@
           }
         }
         elUndo.disabled = !history.length || busy;
+        elShare.disabled = !gameOver;
       }
       function setStatus(){
         if(!gameOver) elStatus.innerHTML = turn==="b" ? "Black to move" : "White thinking...";
@@ -463,6 +469,7 @@
         render();
       }
       function shareResult(){
+        if(!gameOver) return;
         var text=resultText(), url=playUrl();
         if(navigator.share){
           var payload={title:"Chess", text:text};
