@@ -451,7 +451,7 @@
           }
           grid.push(row);
         }
-        var lines = ["Chess https://chess.matthewan.com " + todayStamp(), rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome, "Playing Black", "", grid.join("\n")];
+        var lines = ["Chess " + todayStamp(), rulesLabel() + " \u00B7 " + levelLabel() + " \u00B7 " + outcome, "Playing Black", "", grid.join("\n")];
         var url = playUrl();
         if (url) lines.push("", "Play: " + url);
         return lines.join("\n");
